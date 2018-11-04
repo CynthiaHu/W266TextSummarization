@@ -1,51 +1,29 @@
 #!/bin/bash
+#Run this script in the directory where all nyt zip files have been extracted.
+#the files should be in year/month/day structure, having 1987 to 2007 as the year.
 
-# The project location
-cd desktop/w261submission
+# clear the file
+if [ -e nyt_structured_data.txt ] ; then 
+	mv nyt_structured_data.txt nyt_structured_data.txt.bak
+fi
 
-# The file names
-fileprefix="nyt_corpus_"
-filestart=1987
-fileend=2007
-
-# write to file 
-rm gpfs2.map
-for filename in ./gpfs2/*.zip; do
-   echo $filename
-   zcat $filename | awk '{print $1}' | uniq | awk '{print $1 "  gpfs2  " "'"$filename"'"}' >> gpfs2.map
-done
-
-# install xmllint in linux
-# xml select is another option; below xmllint is used
-# sudo apt-get install libxml2-utils
-#xmllint --xpath 'string(//title)' example.xml >> test.txt
-
-# each field separate by tab
-# one line for each article
-# paragraphs are not separate though!
-xmllint --xpath '/nitf/head/title/text()' example.xml>> test.txt
-echo -n -e "\t" >> test.txt
-xmllint --xpath '/nitf/body/body.content/block[@class="lead_paragraph"]/p/text()' example.xml>> test.txt
-echo -n -e "\t" >> test.txt
-xmllint --xpath '/nitf/body/body.content/block[@class="full_text"]/p/text()' example.xml>> test.txt
-echo "" >> test.txt
-echo "test a new line" >> test.txt
-
-# https://www.tecmint.com/linux-zcat-command-examples/
-
-#read content of a file in a zip
-unzip -p nyt_corpus_docs.zip nyt_corpus_docs/README
-# same but include the file name at the beginning
-unzip -c nyt_corpus_docs.zip nyt_corpus_docs/README
-
-unzip -c nyt_corpus_1989.zip $year/$month/$day/*.xml | wc -l
-
-
-
-for file in {example.xml, example2.xml}
+# get all possible combination of year/month/day/item
+# need to add error handling part if the combination is missing in the folder
+#for y in {1989..1989} #2007
+find [12][90][0-9][0-9] -type f -name "*.xml" | while read xml_file
 do
-  urlpath="$urlprefix$i$urlsuffix"
-  echo $urlpath
-  echo $folder
-  eval "nohup wget $urlpath -P $folder/ &"
+        TITLE=$(xmllint --xpath '/nitf/head/title/text()' $xml_file )
+	if [ $? -ne 0 ]; then 
+		echo $xml_file : XML_Parse Error : in TITLE
+	fi
+        LEAD_PARAGRAPH=$(xmllint --xpath '/nitf/body/body.content/block[@class="lead_paragraph"]/p/text()' $xml_file)
+	if [ $? -ne 0 ]; then 
+		echo $xml_file : XML_Parse Error : in LEAD_PARAGRAPH
+	fi
+        FULL_TEXT=$(xmllint --xpath '/nitf/body/body.content/block[@class="full_text"]/p/text()' $xml_file)
+	if [ $? -ne 0 ]; then 
+		echo $xml_file : XML_Parse Error : in FULL_TEXT
+	fi
+        echo \""$TITLE"\" , \""$LEAD_PARAGRAPH"\" , \""$FULL_TEXT"\"  >> nyt_structured_data.txt
+        echo $xml_file "$TITLE" , "$LEAD_PARAGRAPH" , "$FULL_TEXT"  | grep "\""
 done
