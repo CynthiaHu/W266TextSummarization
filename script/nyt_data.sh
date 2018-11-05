@@ -28,5 +28,5 @@ do
 		FULL_TEXT=""
 		echo $xml_file : XML_Parse Error : in FULL_TEXT
 	fi
-        echo $xml_file , \""$TITLE"\" , \""$LEAD_PARAGRAPH"\" , \""$FULL_TEXT"\" | sed -e "s/\"/\'/g" >> nyt_structured_data.txt
+        echo $xml_file , \""$TITLE"\" , \""$LEAD_PARAGRAPH"\" , \""$FULL_TEXT"\" | sed -e "s/\"/\'/g" >> $OUTPUT_FILE
 done
