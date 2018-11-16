@@ -5,12 +5,16 @@ import re
 import time
 import itertools
 import numpy as np
+import nltk
 
 # For pretty-printing
 import pandas as pd
 from IPython.display import display, HTML
 
+import sent_segment # py file
 from . import constants
+
+nltk.download('treebank') # sentence segmentation
 
 ##
 # Package and module utils
@@ -207,16 +211,33 @@ def load_data(body, title, split=0.8, V=10000, shuffle=0):
         train_ids: flat (1D) np.array(int) of ids
         test_ids: flat (1D) np.array(int) of ids
     """
-    import nltk
-    tokens = []
-    for i in range(len(body)):
-        tokens.extend(nltk.wordpunct_tokenize(body[i]))
-    vocab = build_vocab(tokens, V)
-    train_body, test_body, train_title, test_title = get_train_test_doc(body, title, split, shuffle)
     
-    train_ids = preprocess_sentences(train_body, vocab)
-    test_ids = preprocess_sentences(test_body, vocab)
-    return vocab, train_ids, test_ids
+    all_tokens = []
+    body_tokens = []
+    title_tokens = []
+    for i in range(len(body)):
+        current_body_tokens= nltk.wordpunct_tokenize(body[i])
+        all_tokens.extend(current_body_tokens)
+        body_tokens.append(current_body_tokens)
+    for j in range(len(title)):
+        current_title_tokens= nltk.wordpunct_tokenize(title[i])
+        all_tokens.extend(current_title_tokens)
+        title_tokens.append(current_title_tokens)
+    vocab = build_vocab(all_tokens, V)
+    
+    # sentence segmentation of the body/lead paragraph
+    sentences = []
+    for t in range(len(body_tokens)):
+        sentence = sent_segment.segment_sentences(body_tokens[t])
+        sentences.append(sentence)
+    
+    train_body, test_body, train_title, test_title = get_train_test_doc(sentences, title, split, shuffle)
+    
+    train_x_ids = preprocess_sentences(train_body, vocab)
+    test_x_ids = preprocess_sentences(test_body, vocab)
+    train_y_ids = preprocess_sentences(train_title, vocab)
+    test_y_ids = preprocess_sentences(test_title, vocab)
+    return vocab, train_x_ids, test_x_ids, train_y_ids, test_y_ids
 
 
 ##
@@ -266,21 +287,44 @@ def id_lists_to_sparse_bow(id_lists, vocab_size):
                           shape=[len(id_lists), vocab_size])
     return x
 
-def rnnlm_batch_generator(ids, batch_size, max_time):
-    """Convert ids to data-matrix form for RNN language modeling."""
-    # Clip to multiple of max_time for convenience
-    clip_len = ((len(ids)-1) // batch_size) * batch_size
-    input_w = ids[:clip_len]     # current word
-    target_y = ids[1:clip_len+1]  # next word
-    # Reshape so we can select columns
-    input_w = input_w.reshape([batch_size,-1])
-    target_y = target_y.reshape([batch_size,-1])
+# def rnnlm_batch_generator(ids, batch_size, max_time):
+#     """Convert ids to data-matrix form for RNN language modeling."""
+#     # Clip to multiple of max_time for convenience
+#     clip_len = ((len(ids)-1) // batch_size) * batch_size
+#     input_w = ids[:clip_len]     # current word
+#     target_y = ids[1:clip_len+1]  # next word
+#     # Reshape so we can select columns
+#     input_w = input_w.reshape([batch_size,-1])
+#     target_y = target_y.reshape([batch_size,-1])
+    
+#     # Yield batches
+#     for i in range(0, input_w.shape[1], max_time):
+#         yield input_w[:,i:i+max_time], target_y[:,i:i+max_time]
 
-    # Yield batches
-    for i in range(0, input_w.shape[1], max_time):
-        yield input_w[:,i:i+max_time], target_y[:,i:i+max_time]
+# def rnnlm_batch_generator(x_ids, y_ids, batch_size, max_time):
+#     """Convert ids to data-matrix form for RNN language modeling."""
+#     # Clip to multiple of max_time for convenience
+#     clip_len = ((len(x_ids)-1) // batch_size) * batch_size
+#     input_w = x_ids[:clip_len]     # current word
+# #     target_y = ids[1:clip_len+1]  # next word
+#     # Reshape so we can select columns
+#     input_w = input_w.reshape([batch_size,-1])
+# #     target_y = target_y.reshape([batch_size,-1])
+
+#     # Yield batches
+#     for i in range(0, input_w.shape[1], max_time):
+#         yield input_w[:,i:i+max_time], target_y[:,i:i+max_time]
 
 
+#         bi = utils.rnnlm_batch_generator(train_ids, batch_size, max_time)
+#             for i, (w, y) in enumerate(bi):
+#         # At first batch in epoch, get a clean intitial state.
+#         if i == 0:
+#             h = session.run(lm.initial_h_, {self.embedding_encoder_: w})
+            
+#                 for i in range(0, len(data), batch_size):
+#         yield data[i:i+batch_size]
+        
 def build_windows(ids, N, shuffle=True):
     """Build window input to the window model.
 
