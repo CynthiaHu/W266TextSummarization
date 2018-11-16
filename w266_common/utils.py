@@ -21,14 +21,14 @@ def require_package(package_name):
     if not pkgutil.find_loader(package_name):
         subprocess.check_call([sys.executable, '-m', 'pip', 'install', package_name])
 
-def run_tests(test_module, test_names, reload=True):
-    import unittest
-    if reload:
-        import importlib
-        importlib.reload(test_module)
-    unittest.TextTestRunner(verbosity=2).run(
-        unittest.TestLoader().loadTestsFromNames(
-            test_names, test_module))
+# def run_tests(test_module, test_names, reload=True):
+#     import unittest
+#     if reload:
+#         import importlib
+#         importlib.reload(test_module)
+#     unittest.TextTestRunner(verbosity=2).run(
+#         unittest.TestLoader().loadTestsFromNames(
+#             test_names, test_module))
 
 ##
 # Miscellaneous helpers
@@ -103,10 +103,10 @@ def canonicalize_words(words, **kw):
 
 ##
 # Data loading functions
-def get_corpus(name):
-    import nltk
-    assert(nltk.download(name))
-    return nltk.corpus.__getattr__(name)
+# def get_corpus(name):
+#     import nltk
+#     assert(nltk.download(name))
+#     return nltk.corpus.__getattr__(name)
 
 def build_vocab(corpus, V=10000, **kw):
     from . import vocabulary
@@ -120,11 +120,11 @@ def build_vocab(corpus, V=10000, **kw):
     print("Vocabulary: {:,} types".format(vocab.size))
     return vocab
 
-def get_train_test_sents(corpus, split=0.8, shuffle=True):
+def get_train_test_doc(body,title, split=0.8, shuffle=True):
     """Generate train/test split for unsupervised tasks.
 
     Args:
-      corpus: nltk.corpus that supports sents() function
+      corpus: a list of the article body, body
       split (double): fraction to use as training set
       shuffle (int or bool): seed for shuffle of input data, or False to just
       take the training data as the first xx% contiguously.
@@ -133,23 +133,27 @@ def get_train_test_sents(corpus, split=0.8, shuffle=True):
       train_sentences, test_sentences ( list(list(string)) ): the train and test
       splits
     """
-    sentences = np.array(list(corpus.sents()), dtype=object)
-    fmt = (len(sentences), sum(map(len, sentences)))
-    print("Loaded {:,} sentences ({:g} tokens)".format(*fmt))
+#     sentences = np.array(list(corpus.sents()), dtype=object)
 
-    if shuffle:
-        rng = np.random.RandomState(shuffle)
-        rng.shuffle(sentences)  # in-place
-    split_idx = int(split * len(sentences))
-    train_sentences = sentences[:split_idx]
-    test_sentences = sentences[split_idx:]
+    fmt = (len(body), sum(map(len, body)))
+    print("Loaded {:,} sentences ({:g} tokens)".format(*fmt)) ##??
 
-    fmt = (len(train_sentences), sum(map(len, train_sentences)))
-    print("Training set: {:,} sentences ({:,} tokens)".format(*fmt))
-    fmt = (len(test_sentences), sum(map(len, test_sentences)))
-    print("Test set: {:,} sentences ({:,} tokens)".format(*fmt))
+#     if shuffle:
+#         rng = np.random.RandomState(shuffle)
+#         rng.shuffle(sentences)  # in-place
+    split_idx = int(split * len(body))
+    train_body = body[:split_idx]
+    test_body = body[split_idx:]
+       
+    train_title = title[:split_idx]
+    test_title = title[split_idx:]
 
-    return train_sentences, test_sentences
+    fmt = (len(train_body), sum(map(len, train_body)))
+    print("Training set: {:,} documents ({:,} tokens)".format(*fmt))
+    fmt = (len(test_body), sum(map(len, test_body)))
+    print("Test set: {:,} documents ({:,} tokens)".format(*fmt))
+
+    return train_body, test_body, train_title, test_title
 
 def preprocess_sentences(sentences, vocab, use_eos=False, emit_ids=True,
                          progressbar=lambda l:l):
@@ -180,8 +184,8 @@ def preprocess_sentences(sentences, vocab, use_eos=False, emit_ids=True,
     return np.array(ret, dtype=(np.int32 if emit_ids else object))
 
 
-def load_corpus(corpus, split=0.8, V=10000, shuffle=0):
-    """Load a named corpus and split train/test along sentences.
+def load_data(body, title, split=0.8, V=10000, shuffle=0):
+    """Load a data set and split train/test along sentences.
 
     This is a convenience wrapper to chain together several functions from this
     module, and produce a train/test split suitable for input to most models.
@@ -191,8 +195,7 @@ def load_corpus(corpus, split=0.8, V=10000, shuffle=0):
     to denote sentence bounaries.
 
     Args:
-        corpus: (string | corpus reader) If a string, will fetch the
-            NLTK corpus of that name.
+        body, title: a list of full-body/title of the article
         split: (float \in (0,1]) fraction of examples in train split
         V: (int) vocabulary size (including special tokens)
         shuffle: (int) if > 0, use as random seed to shuffle sentence prior to
@@ -204,13 +207,17 @@ def load_corpus(corpus, split=0.8, V=10000, shuffle=0):
         train_ids: flat (1D) np.array(int) of ids
         test_ids: flat (1D) np.array(int) of ids
     """
-    if isinstance(corpus, str):
-        corpus = get_corpus(corpus)
-    vocab = build_vocab(corpus, V)
-    train_sentences, test_sentences = get_train_test_sents(corpus, split, shuffle)
-    train_ids = preprocess_sentences(train_sentences, vocab)
-    test_ids = preprocess_sentences(test_sentences, vocab)
+    import nltk
+    tokens = []
+    for i in range(len(body)):
+        tokens.extend(nltk.wordpunct_tokenize(body[i]))
+    vocab = build_vocab(tokens, V)
+    train_body, test_body, train_title, test_title = get_train_test_doc(body, title, split, shuffle)
+    
+    train_ids = preprocess_sentences(train_body, vocab)
+    test_ids = preprocess_sentences(test_body, vocab)
     return vocab, train_ids, test_ids
+
 
 ##
 # Window and batch functions
