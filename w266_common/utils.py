@@ -92,6 +92,7 @@ def canonicalize_digits(word):
         word = word.replace(",", "") # remove thousands separator
     return word
 
+
 def canonicalize_word(word, wordset=None, digits=True):
     word = word.lower()
     if digits:
@@ -128,7 +129,7 @@ def get_train_test_doc(body,title, split=0.8, shuffle=True):
     """Generate train/test split for unsupervised tasks.
 
     Args:
-      corpus: a list of the article body, body
+      corpus: a list of the article body, each is an array of sencence list
       split (double): fraction to use as training set
       shuffle (int or bool): seed for shuffle of input data, or False to just
       take the training data as the first xx% contiguously.
@@ -140,7 +141,7 @@ def get_train_test_doc(body,title, split=0.8, shuffle=True):
 #     sentences = np.array(list(corpus.sents()), dtype=object)
 
     fmt = (len(body), sum(map(len, body)))
-    print("Loaded {:,} sentences ({:g} tokens)".format(*fmt)) ##??
+    print("Loaded {:,} documents ({:g} sentences)".format(*fmt)) 
 
 #     if shuffle:
 #         rng = np.random.RandomState(shuffle)
@@ -153,11 +154,13 @@ def get_train_test_doc(body,title, split=0.8, shuffle=True):
     test_title = title[split_idx:]
 
     fmt = (len(train_body), sum(map(len, train_body)))
-    print("Training set: {:,} documents ({:,} tokens)".format(*fmt))
+    print("Training set: {:,} documents ({:,} sentences)".format(*fmt))
     fmt = (len(test_body), sum(map(len, test_body)))
-    print("Test set: {:,} documents ({:,} tokens)".format(*fmt))
+    print("Test set: {:,} documents ({:,} sentences)".format(*fmt))
 
     return train_body, test_body, train_title, test_title
+
+
 
 def preprocess_sentences(sentences, vocab, use_eos=False, emit_ids=True,
                          progressbar=lambda l:l):
@@ -175,14 +178,17 @@ def preprocess_sentences(sentences, vocab, use_eos=False, emit_ids=True,
       ids ( array(int) ): flattened array of sentences, including boundary <s>
       tokens.
     """
+  
+    
     # Add sentence boundaries, canonicalize, and handle unknowns
     word_preproc = lambda w: canonicalize_word(w, wordset=vocab.word_to_id)
     ret = []
-    for s in progressbar(sentences):
-        canonical_words = vocab.pad_sentence(list(map(word_preproc, s)),
-                                             use_eos=use_eos)
-        ret.extend(vocab.words_to_ids(canonical_words) if emit_ids else
-                   canonical_words)
+    for i in range(len(sentences)):
+        for s in progressbar(sentences[i]):
+            canonical_words = vocab.pad_sentence(list(map(word_preproc, s)),
+                                                 use_eos=use_eos)
+            ret.extend(vocab.words_to_ids(canonical_words) if emit_ids else
+                       canonical_words)
     if not use_eos:  # add additional <s> to end if needed
         ret.append(vocab.START_ID if emit_ids else vocab.START_TOKEN)
     return np.array(ret, dtype=(np.int32 if emit_ids else object))
@@ -208,8 +214,8 @@ def load_data(body, title, split=0.8, V=10000, shuffle=0):
     Returns:
         (vocab, train_ids, test_ids)
         vocab: vocabulary.Vocabulary object
-        train_ids: flat (1D) np.array(int) of ids
-        test_ids: flat (1D) np.array(int) of ids
+        x_ids: list (np.array(int) of ids) ??
+        y_ids: flat (1D) np.array(int) of ids
     """
     
     all_tokens = []
@@ -226,20 +232,26 @@ def load_data(body, title, split=0.8, V=10000, shuffle=0):
     vocab = build_vocab(all_tokens, V)
     
     # sentence segmentation of the body/lead paragraph
-    sentences = []
+
+    documents = []
     for t in range(len(body_tokens)):
-        sentence = sent_segment.segment_sentences(body_tokens[t])
-        sentences.append(sentence)
+        document = sent_segment.segment_sentences(body_tokens[t])
+        documents.append(document)
+           
+    train_body, test_body, train_title, test_title = get_train_test_doc(documents, title, split, shuffle)
     
-    train_body, test_body, train_title, test_title = get_train_test_doc(sentences, title, split, shuffle)
-    
-    train_x_ids = preprocess_sentences(train_body, vocab)
-    test_x_ids = preprocess_sentences(test_body, vocab)
+    train_x_ids = []
+    test_x_ids = []
+    for i in range(len(train_body)):
+        train_x_ids.append(preprocess_sentences(train_body[i], vocab))
+    for i in range(len(test_body)):
+        test_x_ids.append(preprocess_sentences(test_body[i], vocab))
     train_y_ids = preprocess_sentences(train_title, vocab)
     test_y_ids = preprocess_sentences(test_title, vocab)
+    
     return vocab, train_x_ids, test_x_ids, train_y_ids, test_y_ids
 
-
+    
 ##
 # Window and batch functions
 def pad_np_array(example_ids, max_len=250, pad_id=0):
@@ -301,29 +313,30 @@ def id_lists_to_sparse_bow(id_lists, vocab_size):
 #     for i in range(0, input_w.shape[1], max_time):
 #         yield input_w[:,i:i+max_time], target_y[:,i:i+max_time]
 
-# def rnnlm_batch_generator(x_ids, y_ids, batch_size, max_time):
-#     """Convert ids to data-matrix form for RNN language modeling."""
-#     # Clip to multiple of max_time for convenience
-#     clip_len = ((len(x_ids)-1) // batch_size) * batch_size
-#     input_w = x_ids[:clip_len]     # current word
-# #     target_y = ids[1:clip_len+1]  # next word
-#     # Reshape so we can select columns
-#     input_w = input_w.reshape([batch_size,-1])
-# #     target_y = target_y.reshape([batch_size,-1])
+def rnnlm_batch_generator(x_ids, y_ids, batch_size, max_time):
+    """Convert ids to data-matrix form for RNN language modeling.
+       return x, y """
+    # Clip to multiple of max_time for convenience
+    clip_len = ((len(x_ids)-1) // batch_size) * batch_size
+    input_w = x_ids[:clip_len]     # current word
+#     target_y = ids[1:clip_len+1]  # next word
+    # Reshape so we can select columns
+    input_w = input_w.reshape([batch_size,-1])
+#     target_y = target_y.reshape([batch_size,-1])
 
-#     # Yield batches
-#     for i in range(0, input_w.shape[1], max_time):
-#         yield input_w[:,i:i+max_time], target_y[:,i:i+max_time]
+    # Yield batches
+    for i in range(0, input_w.shape[1], max_time):
+        yield input_w[:,i:i+max_time], target_y[:,i:i+max_time]
 
-
-#         bi = utils.rnnlm_batch_generator(train_ids, batch_size, max_time)
-#             for i, (w, y) in enumerate(bi):
-#         # At first batch in epoch, get a clean intitial state.
-#         if i == 0:
-#             h = session.run(lm.initial_h_, {self.embedding_encoder_: w})
+############################
+        bi = utils.rnnlm_batch_generator(train_ids, batch_size, max_time)
+            for i, (w, y) in enumerate(bi):
+        # At first batch in epoch, get a clean intitial state.
+        if i == 0:
+            h = session.run(lm.initial_h_, {self.embedding_encoder_: w})
             
-#                 for i in range(0, len(data), batch_size):
-#         yield data[i:i+batch_size]
+                for i in range(0, len(data), batch_size):
+        yield data[i:i+batch_size]
         
 def build_windows(ids, N, shuffle=True):
     """Build window input to the window model.
