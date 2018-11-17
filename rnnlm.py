@@ -193,7 +193,7 @@ class RNNLM(object):
 #                                                              dtype=tf.float32,initial_state=self.initial_h_)
        
             self.encoder_outputs_, self.encoder_final_h_ = tf.nn.dynamic_rnn(
-                                           cell=self.encoder_cell_, inputs=self.encoder_emb_inp,
+                                           cell=self.encoder_cell_, inputs=self.encoder_emb_inp_,
                                            initial_state=self.encoder_initial_h_)
                                           # sequence_length=source_sequence_length, time_major=True
         

@@ -313,30 +313,19 @@ def id_lists_to_sparse_bow(id_lists, vocab_size):
 #     for i in range(0, input_w.shape[1], max_time):
 #         yield input_w[:,i:i+max_time], target_y[:,i:i+max_time]
 
-def rnnlm_batch_generator(x_ids, y_ids, batch_size, max_time):
+def rnnlm_batch_generator(x_ids, y_ids, batch_size):
     """Convert ids to data-matrix form for RNN language modeling.
-       return x, y """
-    # Clip to multiple of max_time for convenience
-    clip_len = ((len(x_ids)-1) // batch_size) * batch_size
-    input_w = x_ids[:clip_len]     # current word
-#     target_y = ids[1:clip_len+1]  # next word
-    # Reshape so we can select columns
-    input_w = input_w.reshape([batch_size,-1])
-#     target_y = target_y.reshape([batch_size,-1])
+     arg: x_ids: list (np.array(int) of ids) ??
+          y_ids: flat (1D) np.array(int) of ids
+     return: encoder_input, decoder_input, decoder_output """
 
-    # Yield batches
-    for i in range(0, input_w.shape[1], max_time):
-        yield input_w[:,i:i+max_time], target_y[:,i:i+max_time]
+    for i in range(0, len(x_ids), batch_size):
+        encoder_inputs = x_ids[i:,i:i+batch_size]
+#         if i >0:
+        decoder_inputs = y_ids[i-1:,i-1:i+batch_size-1]
+        decoder_outputs = y_ids[i:,i:i+batch_size]
+        yield encoder_inputs, decoder_inputs, decoder_outputs
 
-############################
-        bi = utils.rnnlm_batch_generator(train_ids, batch_size, max_time)
-            for i, (w, y) in enumerate(bi):
-        # At first batch in epoch, get a clean intitial state.
-        if i == 0:
-            h = session.run(lm.initial_h_, {self.embedding_encoder_: w})
-            
-                for i in range(0, len(data), batch_size):
-        yield data[i:i+batch_size]
         
 def build_windows(ids, N, shuffle=True):
     """Build window input to the window model.
