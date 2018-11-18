@@ -5,12 +5,16 @@ import re
 import time
 import itertools
 import numpy as np
+import nltk
 
 # For pretty-printing
 import pandas as pd
 from IPython.display import display, HTML
 
+import sent_segment # py file
 from . import constants
+
+nltk.download('treebank') # sentence segmentation
 
 ##
 # Package and module utils
@@ -21,14 +25,14 @@ def require_package(package_name):
     if not pkgutil.find_loader(package_name):
         subprocess.check_call([sys.executable, '-m', 'pip', 'install', package_name])
 
-def run_tests(test_module, test_names, reload=True):
-    import unittest
-    if reload:
-        import importlib
-        importlib.reload(test_module)
-    unittest.TextTestRunner(verbosity=2).run(
-        unittest.TestLoader().loadTestsFromNames(
-            test_names, test_module))
+# def run_tests(test_module, test_names, reload=True):
+#     import unittest
+#     if reload:
+#         import importlib
+#         importlib.reload(test_module)
+#     unittest.TextTestRunner(verbosity=2).run(
+#         unittest.TestLoader().loadTestsFromNames(
+#             test_names, test_module))
 
 ##
 # Miscellaneous helpers
@@ -88,6 +92,7 @@ def canonicalize_digits(word):
         word = word.replace(",", "") # remove thousands separator
     return word
 
+
 def canonicalize_word(word, wordset=None, digits=True):
     word = word.lower()
     if digits:
@@ -103,10 +108,10 @@ def canonicalize_words(words, **kw):
 
 ##
 # Data loading functions
-def get_corpus(name):
-    import nltk
-    assert(nltk.download(name))
-    return nltk.corpus.__getattr__(name)
+# def get_corpus(name):
+#     import nltk
+#     assert(nltk.download(name))
+#     return nltk.corpus.__getattr__(name)
 
 def build_vocab(corpus, V=10000, **kw):
     from . import vocabulary
@@ -120,11 +125,11 @@ def build_vocab(corpus, V=10000, **kw):
     print("Vocabulary: {:,} types".format(vocab.size))
     return vocab
 
-def get_train_test_sents(corpus, split=0.8, shuffle=True):
+def get_train_test_doc(body,title, split=0.8, shuffle=True):
     """Generate train/test split for unsupervised tasks.
 
     Args:
-      corpus: nltk.corpus that supports sents() function
+      corpus: a list of the article body, each is an array of sencence list
       split (double): fraction to use as training set
       shuffle (int or bool): seed for shuffle of input data, or False to just
       take the training data as the first xx% contiguously.
@@ -133,23 +138,29 @@ def get_train_test_sents(corpus, split=0.8, shuffle=True):
       train_sentences, test_sentences ( list(list(string)) ): the train and test
       splits
     """
-    sentences = np.array(list(corpus.sents()), dtype=object)
-    fmt = (len(sentences), sum(map(len, sentences)))
-    print("Loaded {:,} sentences ({:g} tokens)".format(*fmt))
+#     sentences = np.array(list(corpus.sents()), dtype=object)
 
-    if shuffle:
-        rng = np.random.RandomState(shuffle)
-        rng.shuffle(sentences)  # in-place
-    split_idx = int(split * len(sentences))
-    train_sentences = sentences[:split_idx]
-    test_sentences = sentences[split_idx:]
+    fmt = (len(body), sum(map(len, body)))
+    print("Loaded {:,} documents ({:g} sentences)".format(*fmt)) 
 
-    fmt = (len(train_sentences), sum(map(len, train_sentences)))
-    print("Training set: {:,} sentences ({:,} tokens)".format(*fmt))
-    fmt = (len(test_sentences), sum(map(len, test_sentences)))
-    print("Test set: {:,} sentences ({:,} tokens)".format(*fmt))
+#     if shuffle:
+#         rng = np.random.RandomState(shuffle)
+#         rng.shuffle(sentences)  # in-place
+    split_idx = int(split * len(body))
+    train_body = body[:split_idx]
+    test_body = body[split_idx:]
+       
+    train_title = title[:split_idx]
+    test_title = title[split_idx:]
 
-    return train_sentences, test_sentences
+    fmt = (len(train_body), sum(map(len, train_body)))
+    print("Training set: {:,} documents ({:,} sentences)".format(*fmt))
+    fmt = (len(test_body), sum(map(len, test_body)))
+    print("Test set: {:,} documents ({:,} sentences)".format(*fmt))
+
+    return train_body, test_body, train_title, test_title
+
+
 
 def preprocess_sentences(sentences, vocab, use_eos=False, emit_ids=True,
                          progressbar=lambda l:l):
@@ -167,21 +178,24 @@ def preprocess_sentences(sentences, vocab, use_eos=False, emit_ids=True,
       ids ( array(int) ): flattened array of sentences, including boundary <s>
       tokens.
     """
+  
+    
     # Add sentence boundaries, canonicalize, and handle unknowns
     word_preproc = lambda w: canonicalize_word(w, wordset=vocab.word_to_id)
     ret = []
-    for s in progressbar(sentences):
-        canonical_words = vocab.pad_sentence(list(map(word_preproc, s)),
-                                             use_eos=use_eos)
-        ret.extend(vocab.words_to_ids(canonical_words) if emit_ids else
-                   canonical_words)
+    for i in range(len(sentences)):
+        for s in progressbar(sentences[i]):
+            canonical_words = vocab.pad_sentence(list(map(word_preproc, s)),
+                                                 use_eos=use_eos)
+            ret.extend(vocab.words_to_ids(canonical_words) if emit_ids else
+                       canonical_words)
     if not use_eos:  # add additional <s> to end if needed
         ret.append(vocab.START_ID if emit_ids else vocab.START_TOKEN)
     return np.array(ret, dtype=(np.int32 if emit_ids else object))
 
 
-def load_corpus(corpus, split=0.8, V=10000, shuffle=0):
-    """Load a named corpus and split train/test along sentences.
+def load_data(body, title, split=0.8, V=10000, shuffle=0):
+    """Load a data set and split train/test along sentences.
 
     This is a convenience wrapper to chain together several functions from this
     module, and produce a train/test split suitable for input to most models.
@@ -191,8 +205,7 @@ def load_corpus(corpus, split=0.8, V=10000, shuffle=0):
     to denote sentence bounaries.
 
     Args:
-        corpus: (string | corpus reader) If a string, will fetch the
-            NLTK corpus of that name.
+        body, title: a list of full-body/title of the article
         split: (float \in (0,1]) fraction of examples in train split
         V: (int) vocabulary size (including special tokens)
         shuffle: (int) if > 0, use as random seed to shuffle sentence prior to
@@ -201,17 +214,48 @@ def load_corpus(corpus, split=0.8, V=10000, shuffle=0):
     Returns:
         (vocab, train_ids, test_ids)
         vocab: vocabulary.Vocabulary object
-        train_ids: flat (1D) np.array(int) of ids
-        test_ids: flat (1D) np.array(int) of ids
+        x_ids: list (np.array(int) of ids) ??
+        y_ids: flat (1D) np.array(int) of ids
     """
-    if isinstance(corpus, str):
-        corpus = get_corpus(corpus)
-    vocab = build_vocab(corpus, V)
-    train_sentences, test_sentences = get_train_test_sents(corpus, split, shuffle)
-    train_ids = preprocess_sentences(train_sentences, vocab)
-    test_ids = preprocess_sentences(test_sentences, vocab)
-    return vocab, train_ids, test_ids
+    
+    all_tokens = []
+    body_tokens = []
+    title_tokens = []
+    for i in range(len(body)):
+        current_body_tokens= nltk.wordpunct_tokenize(body[i])
+        all_tokens.extend(current_body_tokens)
+        body_tokens.append(current_body_tokens)
+    for j in range(len(title)):
+        current_title_tokens= nltk.wordpunct_tokenize(title[i])
+        all_tokens.extend(current_title_tokens)
+        title_tokens.append(current_title_tokens)
+    vocab = build_vocab(all_tokens, V)
+    
+    # sentence segmentation of the body/lead paragraph
 
+    documents = []
+    for t in range(len(body_tokens)):
+        document = sent_segment.segment_sentences(body_tokens[t])
+        documents.append(document)
+           
+    train_body, test_body, train_title, test_title = get_train_test_doc(documents, title_tokens, split, shuffle)
+    
+    train_x_ids = []
+    test_x_ids = []
+    train_y_ids = []
+    test_y_ids = []
+    for i in range(len(train_body)):
+        train_x_ids.append(preprocess_sentences(train_body[i], vocab))
+    for i in range(len(test_body)):
+        test_x_ids.append(preprocess_sentences(test_body[i], vocab))
+    for i in range(len(train_title)):
+        train_y_ids.append(preprocess_sentences(train_title[i], vocab))
+    for i in range(len(test_title)):
+        test_y_ids.append(preprocess_sentences(test_title[i], vocab))
+    
+    return vocab, train_x_ids, test_x_ids, train_y_ids, test_y_ids
+
+    
 ##
 # Window and batch functions
 def pad_np_array(example_ids, max_len=250, pad_id=0):
@@ -259,21 +303,35 @@ def id_lists_to_sparse_bow(id_lists, vocab_size):
                           shape=[len(id_lists), vocab_size])
     return x
 
-def rnnlm_batch_generator(ids, batch_size, max_time):
-    """Convert ids to data-matrix form for RNN language modeling."""
-    # Clip to multiple of max_time for convenience
-    clip_len = ((len(ids)-1) // batch_size) * batch_size
-    input_w = ids[:clip_len]     # current word
-    target_y = ids[1:clip_len+1]  # next word
-    # Reshape so we can select columns
-    input_w = input_w.reshape([batch_size,-1])
-    target_y = target_y.reshape([batch_size,-1])
+# def rnnlm_batch_generator(ids, batch_size, max_time):
+#     """Convert ids to data-matrix form for RNN language modeling."""
+#     # Clip to multiple of max_time for convenience
+#     clip_len = ((len(ids)-1) // batch_size) * batch_size
+#     input_w = ids[:clip_len]     # current word
+#     target_y = ids[1:clip_len+1]  # next word
+#     # Reshape so we can select columns
+#     input_w = input_w.reshape([batch_size,-1])
+#     target_y = target_y.reshape([batch_size,-1])
+    
+#     # Yield batches
+#     for i in range(0, input_w.shape[1], max_time):
+#         yield input_w[:,i:i+max_time], target_y[:,i:i+max_time]
 
-    # Yield batches
-    for i in range(0, input_w.shape[1], max_time):
-        yield input_w[:,i:i+max_time], target_y[:,i:i+max_time]
+def rnnlm_batch_generator(x_ids, y_ids, batch_size):
+    """Convert ids to data-matrix form for RNN language modeling.
+     arg: x_ids: list (np.array(int) of ids) ??
+          y_ids: flat (1D) np.array(int) of ids
+     return: encoder_input, decoder_input, decoder_output 
+     [batch_size, max_decoder_time] ??"""
+      
+    for i in range(0, len(x_ids), batch_size):
+        encoder_inputs = x_ids[i:,i:i+batch_size]
+#         if i >0:
+        decoder_inputs = y_ids[i-1:,i-1:i+batch_size-1]
+        decoder_outputs = y_ids[i:,i:i+batch_size]
+        yield encoder_inputs, decoder_inputs, decoder_outputs
 
-
+        
 def build_windows(ids, N, shuffle=True):
     """Build window input to the window model.
 
