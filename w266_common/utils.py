@@ -238,16 +238,20 @@ def load_data(body, title, split=0.8, V=10000, shuffle=0):
         document = sent_segment.segment_sentences(body_tokens[t])
         documents.append(document)
            
-    train_body, test_body, train_title, test_title = get_train_test_doc(documents, title, split, shuffle)
+    train_body, test_body, train_title, test_title = get_train_test_doc(documents, title_tokens, split, shuffle)
     
     train_x_ids = []
     test_x_ids = []
+    train_y_ids = []
+    test_y_ids = []
     for i in range(len(train_body)):
         train_x_ids.append(preprocess_sentences(train_body[i], vocab))
     for i in range(len(test_body)):
         test_x_ids.append(preprocess_sentences(test_body[i], vocab))
-    train_y_ids = preprocess_sentences(train_title, vocab)
-    test_y_ids = preprocess_sentences(test_title, vocab)
+    for i in range(len(train_title)):
+        train_y_ids.append(preprocess_sentences(train_title[i], vocab))
+    for i in range(len(test_title)):
+        test_y_ids.append(preprocess_sentences(test_title[i], vocab))
     
     return vocab, train_x_ids, test_x_ids, train_y_ids, test_y_ids
 
@@ -317,8 +321,9 @@ def rnnlm_batch_generator(x_ids, y_ids, batch_size):
     """Convert ids to data-matrix form for RNN language modeling.
      arg: x_ids: list (np.array(int) of ids) ??
           y_ids: flat (1D) np.array(int) of ids
-     return: encoder_input, decoder_input, decoder_output """
-
+     return: encoder_input, decoder_input, decoder_output 
+     [batch_size, max_decoder_time] ??"""
+      
     for i in range(0, len(x_ids), batch_size):
         encoder_inputs = x_ids[i:,i:i+batch_size]
 #         if i >0:
