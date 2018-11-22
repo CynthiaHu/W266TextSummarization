@@ -323,12 +323,11 @@ def rnnlm_batch_generator(x_ids, y_ids, batch_size):
           y_ids: flat (1D) np.array(int) of ids
      return: encoder_input, decoder_input, decoder_output 
      [batch_size, max_decoder_time] ??"""
-      
     for i in range(0, len(x_ids), batch_size):
-        encoder_inputs = x_ids[i:,i:i+batch_size]
+        encoder_inputs = x_ids[i:i+batch_size]
 #         if i >0:
-        decoder_inputs = y_ids[i-1:,i-1:i+batch_size-1]
-        decoder_outputs = y_ids[i:,i:i+batch_size]
+        decoder_inputs = y_ids[i-1:i+batch_size-1]
+        decoder_outputs = y_ids[i:i+batch_size]
         yield encoder_inputs, decoder_inputs, decoder_outputs
 
         
