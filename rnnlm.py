@@ -28,6 +28,21 @@ def matmul3d(X, W):
     return tf.reshape(XWr, newshape)
 
 
+def process_decoder_input(target_data, batch_size):
+    """
+    Preprocess target data for encoding
+    :return: Preprocessed target data
+    """
+    # get '<GO>' id
+    go_id = 0
+    
+    after_slice = tf.strided_slice(target_data, [0, 0], [batch_size, -1], [1, 1])
+    filled_go_id = tf.fill([batch_size, 1], go_id)
+    after_concat = tf.concat( [filled_go_id, after_slice], 1)
+    
+    return after_concat
+
+
 def MakeFancyRNNCell(H, keep_prob, num_layers=1):
     """Make a fancy RNN cell.
 
@@ -45,9 +60,10 @@ def MakeFancyRNNCell(H, keep_prob, num_layers=1):
     cells = []
     for _ in range(num_layers):
         cell = tf.nn.rnn_cell.BasicLSTMCell(H, forget_bias=0.0)
-        cell = tf.nn.rnn_cell.DropoutWrapper(
-          cell, input_keep_prob=keep_prob, output_keep_prob=keep_prob)
+        #cell = tf.nn.rnn_cell.DropoutWrapper(
+        #  cell, input_keep_prob=keep_prob, output_keep_prob=keep_prob)
         cells.append(cell)
+
     return tf.nn.rnn_cell.MultiRNNCell(cells)
 
 
@@ -88,11 +104,13 @@ class RNNLM(object):
         self.SetParams(*args, **kwargs)
 
     @with_self_graph
-    def SetParams(self, V, H, softmax_ns=200, num_layers=1):
+    def SetParams(self, V, H, softmax_ns=200, num_layers=1, batch_size=100):
         # Model structure; these need to be fixed for a given model.
         self.V = V
         self.H = H
         self.num_layers = num_layers
+        self.batch_size_ = batch_size
+
 
         # Training hyperparameters; these can be changed with feed_dict,
         # and you may want to do so during training.
@@ -148,24 +166,26 @@ class RNNLM(object):
         """
         # Input ids, with dynamic shape depending on input. Sourse input words
         # Should be shape [batch_size, max_encoder_time]
-        self.encoder_inputs_ = tf.placeholder(tf.int32, [None, None], name="encoder_inputs")
+        self.encoder_inputs_ = tf.placeholder(tf.int32, [None, None], name="encoder_inputs")  # Batch_size * sentence length
 
         # target input words??
         # Should be shape [batch_size, max_decoder_time] and contain integer word indices.
-        self.decoder_inputs_ = tf.placeholder(tf.int32, [None, None], name="decoder_inputs")
+        self.decoder_inputs_ = tf.placeholder(tf.int32, [None, None], name="decoder_inputs")  # Batch_size * sentence length
         
         # target output words, these are decoder_inputs shifted to the left by one time step with an 
         # end-of-sentence tag appended on the right
         # Should be shape [batch_size, max_decoder_time] and contain integer word indices.
-        self.decoder_outputs_ = tf.placeholder(tf.int32, [None, None], name="decoder_outputs")
+        self.decoder_outputs_ = tf.placeholder(tf.int32, [None, None], name="decoder_outputs")  # Batch_size * sentence length
 
         # Get dynamic shape info from inputs
-        with tf.name_scope("batch_size"):
-            self.batch_size_ = tf.shape(self.encoder_inputs_)[0]
-        with tf.name_scope("max_encoder_time"):
-            self.max_encoder_time_ = tf.shape(self.encoder_inputs_)[1]          
-        with tf.name_scope("max_decoder_time"):
-            self.max_decoder_time_ = tf.shape(self.decoder_inputs_)[1]
+        #with tf.name_scope("batch_size"):
+        #self.batch_size_ = tf.shape(self.encoder_inputs_)[0]  #  batch_size is set to # of rows in the input 
+        
+        #with tf.name_scope("max_encoder_time"):
+        self.max_encoder_time_ = tf.shape(self.encoder_inputs_)[1]  # max_encoder_time is the # of cols of encode input. 
+            
+        #with tf.name_scope("max_decoder_time"):
+        self.max_decoder_time_ = tf.shape(self.decoder_inputs_)[1]  # max_decoder_time is the # of cols of decode input. 
 
         # Get sequence length from encoder_inputs_.
         # TL;DR: pass this to dynamic_rnn.
@@ -174,15 +194,21 @@ class RNNLM(object):
         # sequences in the same batch, although you shouldn't need to for this
         # assignment.
         self.ns_ = tf.tile([self.max_encoder_time_], [self.batch_size_, ], name="ns")
+        #decoder_lengths = tf.placeholder(tf.int32, shape=(self.batch_size_), name="decoer_length")
+        self.decoder_lengths = tf.reduce_sum(tf.to_int32(tf.not_equal(self.decoder_outputs_, 1)), 1)  # 1D vector (reduced to "1" dimension)
 
-
+        self.embedding_ = tf.Variable(tf.random_uniform([self.V, self.H],-1, 1), name="embedding")
         # Construct embedding layer: vocab_size X embedding_size
-        with tf.name_scope("Embedding_Layer"):
-            self.embedding_ = tf.Variable(tf.random_uniform([self.V, self.H], -1.0, 1.0), name="embedding_encoder")
+        with tf.variable_scope("Embedding_Layer", reuse=tf.AUTO_REUSE):
+            
             # embedding_lookup gives shape (batch_size, max_encoder_time, H)
-            self.encoder_emb_inp_ = tf.nn.embedding_lookup(self.embedding_, self.encoder_inputs_)
-            self.decoder_emb_inp_ = tf.nn.embedding_lookup(self.embedding_, self.decoder_inputs_)
-#             print(self.encoder_emb_inp_.get_shape())
+            #self.encoder_emb_inp_ = tf.nn.embedding_lookup(self.embedding_, self.encoder_inputs_)
+            self.encoder_emb_inp_ = tf.contrib.layers.embed_sequence(self.encoder_inputs_, 
+                                             vocab_size=self.V, 
+                                             embed_dim=self.H)
+
+
+        #   print(self.encoder_emb_inp_.get_shape())
 
         # placeholder
         self.source_sequence_length_ = None
@@ -191,7 +217,7 @@ class RNNLM(object):
 
         # Construct RNN/LSTM cell and recurrent layer.
         with tf.name_scope("Encoder_Layer"):
-            self.encoder_cell_ = MakeFancyRNNCell(H=self.H, keep_prob=self.dropout_keep_prob_, num_layers=self.num_layers)           
+            self.encoder_cell_ = MakeFancyRNNCell(H=self.H, keep_prob=0, num_layers=self.num_layers)           
             self.encoder_initial_h_ = self.encoder_cell_.zero_state(self.batch_size_, dtype=tf.float32)
             
             #   encoder_outputs: [batch_size, max_encoder_time, H]
@@ -204,29 +230,46 @@ class RNNLM(object):
                                            cell=self.encoder_cell_, inputs=self.encoder_emb_inp_,
                                            initial_state=self.encoder_initial_h_)
 #                                            sequence_length=self.source_sequence_length_)
-    
+            
+            
         def length(sequence):
             used = tf.sign(tf.reduce_max(tf.abs(sequence), 2))
             length = tf.reduce_sum(used, 1)
             length = tf.cast(length, tf.int32)
             return length
         
+
+            
         with tf.name_scope("Decoder_Layer"):      
+            self.tmp_dec_inp = process_decoder_input(self.decoder_inputs_,self.batch_size_)  #2nd argument needs to be the batch size, matching the decoder_initial_h_ size.
+
+            self.decoder_emb_inp_ = tf.nn.embedding_lookup(self.embedding_, self.tmp_dec_inp)
+
+            #self.decoder_cell_ = MakeFancyRNNCell(H=self.H, keep_prob=self.dropout_keep_prob_, num_layers=self.num_layers)
             self.decoder_cell_ = tf.nn.rnn_cell.BasicLSTMCell(self.H)
+            self.decoder_initial_h_ = self.decoder_cell_.zero_state(self.batch_size_, dtype=tf.float32)  # This needs to match dimention of the self.tmp_dec_inp that is also used in the helper. 
+
 
             # Helper
             self.helper_ = tf.contrib.seq2seq.TrainingHelper(
-                self.decoder_emb_inp_, length(self.decoder_emb_inp_)) # what's decoder sequence length, 
+                self.decoder_emb_inp_, 
+                self.decoder_lengths
+                ) # what's decoder sequence length, 
+
+            #self.helper_ = tf.contrib.seq2seq.TrainingHelper(
+            #    self.decoder_emb_inp_, length(self.decoder_emb_inp_)) # what's decoder sequence length, 
+            
             # Decoder, accessing to the source information through initializing it with the last hidden state of the encoder
+
             self.decoder_ = tf.contrib.seq2seq.BasicDecoder(
-                self.decoder_cell_, self.helper_, self.encoder_final_h_)
-#                 output_layer=self.projection_layer_)
+                self.decoder_cell_, self.helper_, self.decoder_initial_h_ )#, output_layer=self.projection_layer_)
+            
             # Dynamic decoding, returns (final_outputs, final_state, final_sequence_lengths)
-            self.outputs_, _ = tf.contrib.seq2seq.dynamic_decode(self.decoder_)
-#             self.logits_ = self.outputs_.rnn_output
+            self.outputs_, _ ,_ = tf.contrib.seq2seq.dynamic_decode(self.decoder_,impute_finished=True)
+            self.logits_ = self.outputs_.rnn_output
         
             # projection, turn the top hidden states to logit vectors of dimension V
-            self.projection_layer_ = layers_core.Dense(self.V, use_bias=False) 
+            #self.projection_layer_ = layers_core.Dense(self.V, use_bias=False) 
 
 
         # Output layer, only computer logits here # I think i need to use projection layer above
@@ -234,8 +277,8 @@ class RNNLM(object):
         with tf.name_scope("Output_Layer"):
             self.W_out_ = tf.Variable(tf.random_uniform([self.H,self.V], -1.0, 1.0), name="W_out") #hidden_size, V
             self.b_out_ = tf.Variable(tf.zeros([self.V], dtype=tf.float32), name="b_out")
-            self.logits_ = tf.reshape(tf.add(matmul3d(self.outputs_, self.W_out_),self.b_out_, name="logits"),
-                                      [self.batch_size_,self.max_decoder_time_,self.V])
+            #self.logits_ = tf.reshape(tf.add(matmul3d(self.outputs_, self.W_out_),self.b_out_, name="logits"),
+            #                          [self.batch_size_,self.max_decoder_time_,self.V])
 
 
         # Loss computation (true loss, for prediction)
@@ -280,8 +323,9 @@ class RNNLM(object):
         
         with tf.name_scope("Training_Loss"):
             self.per_example_train_loss_ = tf.nn.sampled_softmax_loss(weights=tf.transpose(self.W_out_), biases=self.b_out_,
-                                                     labels=tf.expand_dims(tf.reshape(self.decoder_outputs,[-1,]), 1), 
-                                                     inputs=tf.reshape(self.outputs_,[self.batch_size_*self.max_decoder_time_,self.H]),
+                                                     labels=tf.expand_dims(tf.reshape(self.logits_,[-1,]), 1), 
+                                                     inputs=tf.reshape(self.logits_,
+                                                     [self.batch_size_*self.max_decoder_time_,self.H]),
                                                      num_sampled=self.softmax_ns, num_classes=self.V,
                                                      name="per_example_sampled_softmax_loss")
             self.train_loss_ = tf.reduce_mean(self.per_example_train_loss_, name="sampled_softmax_loss")
