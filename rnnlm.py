@@ -156,13 +156,6 @@ class RNNLM(object):
         _average_ loss across all examples in the batch (i.e. use tf.reduce_mean,
         not tf.reduce_sum).
 
-        You shouldn't include training or Inference functions here; you'll do
-        this in BuildTrainGraph and BuildInferenceGraph below.
-
-        We give you some starter definitions for encoder_inputs_ and decoder_outputs_ as
-        well as a few other tensors that might help. 
-
-        See the in-line comments for more detail.
         """
         # Input ids, with dynamic shape depending on input. Sourse input words
         # Should be shape [batch_size, max_encoder_time]
@@ -222,10 +215,6 @@ class RNNLM(object):
             
             #   encoder_outputs: [batch_size, max_encoder_time, H]
             #   encoder_final: [batch_size, H]
-    
-#             self.outputs_, self.final_h_ = tf.nn.dynamic_rnn(cell=self.cell_, inputs=self.x_, 
-#                                                              dtype=tf.float32,initial_state=self.initial_h_)
- 
             self.encoder_outputs_, self.encoder_final_h_ = tf.nn.dynamic_rnn(
                                            cell=self.encoder_cell_, inputs=self.encoder_emb_inp_,
                                            initial_state=self.encoder_initial_h_)
@@ -238,7 +227,6 @@ class RNNLM(object):
             length = tf.cast(length, tf.int32)
             return length
         
-
             
         with tf.name_scope("Decoder_Layer"):      
             self.tmp_dec_inp = process_decoder_input(self.decoder_inputs_,self.batch_size_)  #2nd argument needs to be the batch size, matching the decoder_initial_h_ size.
@@ -255,9 +243,6 @@ class RNNLM(object):
                 self.decoder_emb_inp_, 
                 self.decoder_lengths
                 ) # what's decoder sequence length, 
-
-            #self.helper_ = tf.contrib.seq2seq.TrainingHelper(
-            #    self.decoder_emb_inp_, length(self.decoder_emb_inp_)) # what's decoder sequence length, 
             
             # Decoder, accessing to the source information through initializing it with the last hidden state of the encoder
 
@@ -306,14 +291,6 @@ class RNNLM(object):
         _average_ loss across all examples in the batch (i.e. use tf.reduce_mean,
         not tf.reduce_sum).
         """
-        # Replace this with an actual training op
-        self.train_step_ = None
-
-        # Replace this with an actual loss function
-        self.train_loss_ = None
-
-        #### YOUR CODE HERE ####
-        # See hints in instructions!
 
         # Define approximate loss function.
         # Note: self.softmax_ns (i.e. k=200) is already defined; use that as the
