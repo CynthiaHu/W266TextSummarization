@@ -32,7 +32,7 @@ class Vocabulary(object):
 
         # Leave space for "<s>", "</s>", and "<unk>"
         top_counts = self.unigram_counts.most_common(None if size is None else (size - 3))
-        vocab = ([self.START_TOKEN, self.END_TOKEN, self.UNK_TOKEN] +
+        vocab = ([self.START_TOKEN, self.END_TOKEN, self.UNK_TOKEN,'<GO>','<STOP>'] +
                  [w for w,c in top_counts])
 
         # Assign an id to each word, by frequency
