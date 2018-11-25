@@ -10,6 +10,8 @@ class Vocabulary(object):
     START_TOKEN = constants.START_TOKEN
     END_TOKEN   = constants.END_TOKEN
     UNK_TOKEN   = constants.UNK_TOKEN
+#     GO_TOKEN = '<GO>'
+#     STOP_TOKEN = '<STOP>'
 
     def __init__(self, tokens, size=None,
                  progressbar=lambda l:l):
@@ -38,9 +40,11 @@ class Vocabulary(object):
         # Assign an id to each word, by frequency
         self.id_to_word = dict(enumerate(vocab))
         self.word_to_id = {v:k for k,v in self.id_to_word.items()}
-        self.size = len(self.id_to_word)
-        if size is not None:
-            assert(self.size <= size)
+        print(self.size, len(self.id_to_word))
+#         self.size = len(self.id_to_word)
+#         print(self.size, size)
+#         if size is not None:
+#             assert(self.size <= size)
 
         # For convenience
         self.wordset = set(self.word_to_id.keys())
@@ -49,6 +53,9 @@ class Vocabulary(object):
         self.START_ID = self.word_to_id[self.START_TOKEN]
         self.END_ID = self.word_to_id[self.END_TOKEN]
         self.UNK_ID = self.word_to_id[self.UNK_TOKEN]
+#         self.GO_ID = self.word_to_id[self.GO_TOKEN]
+#         self.STOP_ID = self.word_to_id[self.STOP_TOKEN]
+
 
     @property
     def num_unigrams(self):
