@@ -34,7 +34,7 @@ def process_decoder_input(target_data, batch_size):
     :return: Preprocessed target data
     """
     # get '<GO>' id: 3; <STOP>: 4
-    go_id = 3
+    go_id = 0
     # extracts a slice of size (end-begin)/stride from the given input_ tensor. 
     # two dimention??
     after_slice = tf.strided_slice(target_data, [0, 0], [batch_size, -1], [1, 1])# input, begin, end, strides
@@ -113,7 +113,7 @@ class RNNLM(object):
         self.batch_size_ = batch_size
         
         self.start_of_sequence_id = 3 # Go
-        self.end_of_sequence_id = 4 # STOP
+        self.end_of_sequence_id = 1 # END_TOKEN
 
 
         # Training hyperparameters; these can be changed with feed_dict,
@@ -288,26 +288,4 @@ class RNNLM(object):
 
         # Initializer step
         init_ = tf.global_variables_initializer()
-
-
-    @with_self_graph
-    def BuildSamplerGraph(self):
-        """Construct the sampling ops.
-
-        You should define pred_samples_ to be a Tensor of integer indices for
-        sampled predictions for each batch element, at each timestep.
-
-        Hint: use tf.multinomial, along with a couple of calls to tf.reshape
-        """
-        # Replace with a Tensor of shape [batch_size, max_time, num_samples = 1]
-        self.pred_samples_ = None
-
-        #### YOUR CODE HERE ####
-        with tf.name_scope("Prediction"):
-            self.pred_proba_ = tf.nn.softmax(self.logits_, name="pred_proba")
-            self.pred_max_ = tf.argmax(self.logits_, 1, name="pred_max")
-            self.pred_samples_ = tf.reshape(tf.multinomial(tf.reshape(self.logits_,[self.batch_size_*self.max_time_,self.V]), 1, name="pred_samples"),[self.batch_size_,self.max_time_,1])
-   
-        #### END(YOUR CODE) ####
-
 

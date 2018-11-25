@@ -27,7 +27,7 @@ def punct_features(tokens, i):
     'prev-word': prev_lower,
     'punct': tokens[i],
     'prev-word-is-one-char': prev_one_char}
-featuresets = [(punct_features(tokens, i), (i in boundaries)) for i in range(1, len(tokens)-1) if tokens[i] in '.?!']
+featuresets = [(punct_features(tokens, i), (i in boundaries)) for i in range(1, len(tokens)-1) if tokens[i] in '.?!;']
 
 size = int(len(featuresets) * 0.1)
 train_set, test_set = featuresets[size:], featuresets[:size]
@@ -38,7 +38,7 @@ def segment_sentences(words):
     start = 0
     sents = []
     for i, word in enumerate(words):
-        if word in '.?!' and classifier.classify(punct_features(words, i)) == True:
+        if word in '.?!;' and classifier.classify(punct_features(words, i)) == True:
             sents.append(words[start:i+1])
             start = i+1
     if start < len(words):

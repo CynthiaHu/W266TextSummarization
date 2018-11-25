@@ -125,7 +125,7 @@ def build_vocab(corpus, V=10000, **kw):
     print("Vocabulary: {:,} types".format(vocab.size))
     return vocab
 
-def get_train_test_doc(body,title, split=0.8, shuffle=True):
+def get_train_test_doc(source,target, split=0.8, shuffle=True):
     """Generate train/test split for unsupervised tasks.
 
     Args:
@@ -140,25 +140,25 @@ def get_train_test_doc(body,title, split=0.8, shuffle=True):
     """
 #     sentences = np.array(list(corpus.sents()), dtype=object)
 
-    fmt = (len(body), sum(map(len, body)))
+    fmt = (len(source), sum(map(len, source)))
     print("Loaded {:,} documents ({:g} sentences)".format(*fmt)) 
 
 #     if shuffle:
 #         rng = np.random.RandomState(shuffle)
 #         rng.shuffle(sentences)  # in-place
-    split_idx = int(split * len(body))
-    train_body = body[:split_idx]
-    test_body = body[split_idx:]
+    split_idx = int(split * len(source))
+    train_source = source[:split_idx]
+    test_source = source[split_idx:]
        
-    train_title = title[:split_idx]
-    test_title = title[split_idx:]
+    train_target = target[:split_idx]
+    test_target = target[split_idx:]
 
-    fmt = (len(train_body), sum(map(len, train_body)))
-    print("Training set: {:,} documents ({:,} sentences)".format(*fmt))
-    fmt = (len(test_body), sum(map(len, test_body)))
-    print("Test set: {:,} documents ({:,} sentences)".format(*fmt))
+    fmt = (len(train_source), sum(map(len, train_source)))
+    print("Training set: {:,} articles ({:,} tokens)".format(*fmt))
+    fmt = (len(test_source), sum(map(len, test_source)))
+    print("Test set: {:,} articles ({:,} tokens)".format(*fmt))
 
-    return train_body, test_body, train_title, test_title
+    return train_source, test_source, train_target, test_target
 
 
 
@@ -169,7 +169,7 @@ def preprocess_sentences(sentences, vocab, use_eos=False, emit_ids=True,
     Args:
       sentences ( list(list(string)) ): input sentences
       vocab: Vocabulary object, already initialized
-      use_eos: if true, will add </s> token to end of sentence.
+      use_eos: if true, will add </s> token to end of sentences.
       emit_ids: if true, will emit as ids. Otherwise, will be preprocessed
           tokens.
       progressbar: (optional) progress bar to wrap iterator.
@@ -194,7 +194,7 @@ def preprocess_sentences(sentences, vocab, use_eos=False, emit_ids=True,
     return np.array(ret, dtype=(np.int32 if emit_ids else object))
 
 
-def load_data(body, title, split=0.8, V=10000, shuffle=0):
+def load_data(source, target, split=0.8, V=10000, shuffle=0):
     """Load a data set and split train/test along sentences.
 
     This is a convenience wrapper to chain together several functions from this
@@ -205,53 +205,55 @@ def load_data(body, title, split=0.8, V=10000, shuffle=0):
     to denote sentence bounaries.
 
     Args:
-        body, title: a list of full-body/title of the article
+        source, target: a list of selected sentecences from extractor model/abstract of the article
         split: (float \in (0,1]) fraction of examples in train split
         V: (int) vocabulary size (including special tokens)
         shuffle: (int) if > 0, use as random seed to shuffle sentence prior to
             split. Can change this to get different splits.
 
     Returns:
-        (vocab, train_ids, test_ids)
+        (vocab, train_x_ids, test_x_ids, train_y_ids, test_y_ids)
         vocab: vocabulary.Vocabulary object
-        x_ids: list (np.array(int) of ids) ??
-        y_ids: flat (1D) np.array(int) of ids
+        x_ids: list of list of ids, each item in the inner list represents ids of input sentences of one article
+        y_ids: list of list of ids, each item in the inner list represents ids of abstract of one article
     """
     
+    # tokenized and get vocabulary
     all_tokens = []
-    body_tokens = []
-    title_tokens = []
-    for i in range(len(body)):
-        current_body_tokens= nltk.wordpunct_tokenize(body[i])
-        all_tokens.extend(current_body_tokens)
-        body_tokens.append(current_body_tokens)
-    for j in range(len(title)):
-        current_title_tokens= nltk.wordpunct_tokenize(title[i])
-        all_tokens.extend(current_title_tokens)
-        title_tokens.append(current_title_tokens)
+    source_tokens = []
+    target_tokens = []
+    for i in range(len(source)):
+        current_source_tokens= nltk.wordpunct_tokenize(source[i]) # one item represents several sentences
+        all_tokens.extend(current_source_tokens)
+        source_tokens.append(current_source_tokens)
+    for j in range(len(target)):
+        current_target_tokens= nltk.wordpunct_tokenize(target[i])
+        all_tokens.extend(current_target_tokens)
+        target_tokens.append(current_target_tokens)
     vocab = build_vocab(all_tokens, V)
     
-    # sentence segmentation of the body/lead paragraph
-
-    documents = []
-    for t in range(len(body_tokens)):
-        document = sent_segment.segment_sentences(body_tokens[t])
-        documents.append(document)
-           
-    train_body, test_body, train_title, test_title = get_train_test_doc(documents, title_tokens, split, shuffle)
+    
+#     # sentence segmentation of the source/target paragraph
+#     paragraph = []
+#     for t in range(len(source_tokens)):
+#         sentence = sent_segment.segment_sentences(source_tokens[t])
+#         paragraph.append(sentence)
+      
+    
+    train_source, test_source, train_target, test_target = get_train_test_doc(source_tokens, target_tokens, split, shuffle)
     
     train_x_ids = []
     test_x_ids = []
     train_y_ids = []
     test_y_ids = []
-    for i in range(len(train_body)):
-        train_x_ids.append(preprocess_sentences(train_body[i], vocab))
-    for i in range(len(test_body)):
-        test_x_ids.append(preprocess_sentences(test_body[i], vocab))
-    for i in range(len(train_title)):
-        train_y_ids.append(preprocess_sentences(train_title[i], vocab))
-    for i in range(len(test_title)):
-        test_y_ids.append(preprocess_sentences(test_title[i], vocab))
+    for i in range(len(train_source)):
+        train_x_ids.append(preprocess_sentences(train_source[i], vocab))
+    for i in range(len(test_source)):
+        test_x_ids.append(preprocess_sentences(test_source[i], vocab))
+    for i in range(len(train_target)):
+        train_y_ids.append(preprocess_sentences(train_target[i], vocab))
+    for i in range(len(test_target)):
+        test_y_ids.append(preprocess_sentences(test_target[i], vocab))
     
     return vocab, train_x_ids, test_x_ids, train_y_ids, test_y_ids
 
@@ -303,33 +305,64 @@ def id_lists_to_sparse_bow(id_lists, vocab_size):
                           shape=[len(id_lists), vocab_size])
     return x
 
-# def rnnlm_batch_generator(ids, batch_size, max_time):
-#     """Convert ids to data-matrix form for RNN language modeling."""
-#     # Clip to multiple of max_time for convenience
-#     clip_len = ((len(ids)-1) // batch_size) * batch_size
-#     input_w = ids[:clip_len]     # current word
-#     target_y = ids[1:clip_len+1]  # next word
-#     # Reshape so we can select columns
-#     input_w = input_w.reshape([batch_size,-1])
-#     target_y = target_y.reshape([batch_size,-1])
+def rnnlm_batch_generator(ids, batch_size, max_time):
+    """Convert ids to data-matrix form for RNN language modeling."""
+    # Clip to multiple of max_time for convenience
+    clip_len = ((len(ids)-1) // batch_size) * batch_size
+    input_w = ids[:clip_len]     # current word
+    target_y = ids[1:clip_len+1]  # next word
+    # Reshape so we can select columns
+    input_w = input_w.reshape([batch_size,-1])
+    target_y = target_y.reshape([batch_size,-1])
     
-#     # Yield batches
-#     for i in range(0, input_w.shape[1], max_time):
-#         yield input_w[:,i:i+max_time], target_y[:,i:i+max_time]
+    # Yield batches
+    for i in range(0, input_w.shape[1], max_time):
+        yield input_w[:,i:i+max_time], target_y[:,i:i+max_time]
 
-def rnnlm_batch_generator(x_ids, y_ids, batch_size):
-    """Convert ids to data-matrix form for RNN language modeling.
-     arg: x_ids: list (np.array(int) of ids) ??
-          y_ids: flat (1D) np.array(int) of ids
-     return: encoder_input, decoder_input, decoder_output 
-     [batch_size, max_decoder_time] ??"""
-    for i in range(0, len(x_ids), batch_size):
-        encoder_inputs = x_ids[i:i+batch_size]
-#         if i >0:
-        decoder_inputs = y_ids[i-1:i+batch_size-1]
-        decoder_outputs = y_ids[i:i+batch_size]
-        yield encoder_inputs, decoder_inputs, decoder_outputs
+# def rnnlm_batch_generator(x_ids, y_ids, batch_size):
+#     """Convert ids to data-matrix form for RNN language modeling.
+#      arg: x_ids: list (np.array(int) of ids) ??
+#           y_ids: flat (1D) np.array(int) of ids
+#      return: encoder_input, decoder_input, decoder_output 
+#      [batch_size, max_decoder_time] ??"""
+#     for i in range(0, len(x_ids), batch_size):
+#         encoder_inputs = x_ids[i:i+batch_size]
+# #         if i >0:
+#         decoder_inputs = y_ids[i-1:i+batch_size-1]
+#         decoder_outputs = y_ids[i:i+batch_size]
+#         yield encoder_inputs, decoder_inputs, decoder_outputs
 
+
+def pad_sentence_batch(sentence_batch, pad_int):
+    """Pad sentences with <PAD> so that each sentence of a batch has the same length"""
+    max_sentence = max([len(sentence) for sentence in sentence_batch])
+    return [sentence + [pad_int] * (max_sentence - len(sentence)) for sentence in sentence_batch]
+        
+def get_batches(x_ids, y_ids, batch_size, pad_int=1): #END_TOKEN
+    """Batch targets, sources, and the lengths of their paragragh together"""
+    for batch_i in range(0, len(x_ids)//batch_size):
+        start_i = batch_i * batch_size
+
+        # Slice the right amount for the batch
+        sources_batch = x_ids[start_i:start_i + batch_size]
+        targets_batch = y_ids[start_i:start_i + batch_size]
+
+        # Pad
+        pad_sources_batch = np.array(pad_sentence_batch(sources_batch, pad_int))
+        pad_targets_batch = np.array(pad_sentence_batch(targets_batch, pad_int))
+
+        # Need the lengths for the _lengths parameters
+        pad_targets_lengths = []
+        for target in pad_targets_batch:
+            pad_targets_lengths.append(len(target))
+
+        pad_source_lengths = []
+        for source in pad_sources_batch:
+            pad_source_lengths.append(len(source))
+
+        yield pad_sources_batch, pad_targets_batch, pad_source_lengths, pad_targets_lengths
+        
+        
         
 def build_windows(ids, N, shuffle=True):
     """Build window input to the window model.
