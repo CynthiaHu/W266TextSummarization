@@ -112,7 +112,7 @@ class RNNLM(object):
         self.num_layers = num_layers
         self.batch_size_ = batch_size
         
-        self.start_of_sequence_id = 3 # Go
+        self.start_of_sequence_id = 0 # Go
         self.end_of_sequence_id = 1 # END_TOKEN
 
 
@@ -209,7 +209,7 @@ class RNNLM(object):
             self.embedding_ = tf.Variable(tf.random_uniform([self.V, self.H],-1, 1), name="embedding")    
             
             # 2nd argument needs to be the batch size, matching the decoder_initial_ size.
-            self.tmp_dec_inp = process_decoder_input(self.decoder_inputs_,self.batch_size_)  
+            self.tmp_dec_inp = process_decoder_input(self.decoder_targets_,self.batch_size_)  
 
             # decoder training and inference share the same embedding parameters
             self.decoder_emb_inp_ = tf.nn.embedding_lookup(self.embedding_, self.tmp_dec_inp)
@@ -227,7 +227,10 @@ class RNNLM(object):
                 self.decoder_emb_inp_, 
                 self.target_sequence_length_
                 )
-
+    
+            # output layer, turn the top hidden states to logit vectors of dimension V
+            self.output_layer_ = tf.layers.Dense(self.V, use_bias=False) 
+            
             # basic decoder model, connecting the decoder RNN layers and the input prepared by TrainingHelper
             # Decoder, accessing to the source information through initializing it with the last hidden state of the encoder
             self.decoder_ = tf.contrib.seq2seq.BasicDecoder(cell=self.decoder_cell_, helper=self.helper_, 
@@ -236,12 +239,10 @@ class RNNLM(object):
             # Dynamic decoding, returns (final_outputs, final_state, final_sequence_lengths)
             # output containing training logits and sample_id
             self.outputs_, _ ,_ = tf.contrib.seq2seq.dynamic_decode(self.decoder_,impute_finished=True,
-                                                                   maximum_iterations=max_target_length_) 
+                                                                   maximum_iterations=self.max_target_length_) 
                 
             self.logits_ = tf.identity(self.outputs_.rnn_output, name="logits")    
-    
-            # output layer, turn the top hidden states to logit vectors of dimension V
-            self.output_layer_ = tf.layers.Dense(self.V, use_bias=False) 
+
 
             
              ######## Decoder Inference ############      
@@ -251,7 +252,7 @@ class RNNLM(object):
             # provide the decode embedding parameter from training to inference helper
             self.helper_inf_ = tf.contrib.seq2seq.GreedyEmbeddingHelper(
                 self.decoder_emb_inp_, 
-                tf.fill([self.batch_size],self.start_of_sequence_id), # id of Go
+                tf.fill([self.batch_size_],self.start_of_sequence_id), # id of Go
                 self.end_of_sequence_id # if of EOS
                 )
                        
@@ -260,7 +261,7 @@ class RNNLM(object):
             
             # output contains inference logits and sample_id
             self.outputs_inf_, _ ,_ = tf.contrib.seq2seq.dynamic_decode(self.decoder_inf_,impute_finished=True,
-                                                                       maximum_iterations=max_target_length_) 
+                                                                       maximum_iterations=self.max_target_length_) 
      
             self.logits_inf_ = tf.identity(self.outputs_inf_.sample_id, name="predictions")
 
