@@ -3,10 +3,10 @@ This is the final project for DATASCI W266: Natural Language Processing with Dee
 
 - Data Source: New York Times corpus, downloaded from http://oskicat.berkeley.edu/search~S1?/aLinguistic+Data+Consortium%7C 
 - [Data Extraction](https://github.com/CynthiaHu/W266TextSummarization/blob/master/nyt_data.sh)
-- [EDA](https://github.com/CynthiaHu/W266TextSummarization/blob/master/EDA%20and%20Formula.ipynb)
+- [Explorary Analysis](https://github.com/CynthiaHu/W266TextSummarization/blob/master/EDA%20and%20Formula.ipynb)
 - Sentence Ranking Model
 - [Sequence-to-Sequence Model](https://github.com/CynthiaHu/W266TextSummarization/blob/master/Clean_S2S_abstract.ipynb)
 - [Evaluation](https://github.com/CynthiaHu/W266TextSummarization/blob/master/evaluation_utils.py)
-- [Report](Report/)
+- [Report](report/)
 - [Other Supporting Files](supporting_files)
 
