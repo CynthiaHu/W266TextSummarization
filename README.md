@@ -7,6 +7,6 @@ This is the final project for DATASCI W266: Natural Language Processing with Dee
 - Sentence Ranking Model
 - [Sequence-to-Sequence Model](https://github.com/CynthiaHu/W266TextSummarization/blob/master/Clean_S2S_abstract.ipynb)
 - [Evaluation](https://github.com/CynthiaHu/W266TextSummarization/blob/master/evaluation_utils.py)
-- [Report](report/)
+- [Report](report/) ([Original Google Doc](https://docs.google.com/document/d/1PXQmNlIy0Ls6ETZT9XihUOoPa15PRsvQNivMAL24pTw/edit?usp=sharing))
 - [Other Supporting Files](supporting_files)
 
