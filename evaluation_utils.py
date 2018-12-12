@@ -21,8 +21,8 @@ import subprocess
 
 import tensorflow as tf
 
-from ..scripts import bleu
-from ..scripts import rouge
+import bleu
+import rouge
 
 
 __all__ = ["evaluate"]
@@ -69,28 +69,30 @@ def _bleu(ref_file, trans_file, subword_option=None):
   max_order = 4
   smooth = False
 
-  ref_files = [ref_file]
-  reference_text = []
-  for reference_filename in ref_files:
-    with codecs.getreader("utf-8")(
-        tf.gfile.GFile(reference_filename, "rb")) as fh:
-      reference_text.append(fh.readlines())
+#   ref_files = [ref_file]
+#   reference_text = []
+#   for reference_filename in ref_files:
+#     with codecs.getreader("utf-8")(
+#         tf.gfile.GFile(reference_filename, "rb")) as fh:
+#       reference_text.append(fh.readlines())
 
-  per_segment_references = []
-  for references in zip(*reference_text):
-    reference_list = []
-    for reference in references:
-      reference = _clean(reference, subword_option)
-      reference_list.append(reference.split(" "))
-    per_segment_references.append(reference_list)
+#   per_segment_references = []
+#   for references in zip(*reference_text):
+#     reference_list = []
+#     for reference in references:
+#       reference = _clean(reference, subword_option)
+#       reference_list.append(reference.split(" "))
+#     per_segment_references.append(reference_list)
 
-  translations = []
-  with codecs.getreader("utf-8")(tf.gfile.GFile(trans_file, "rb")) as fh:
-    for line in fh:
-      line = _clean(line, subword_option=None)
-      translations.append(line.split(" "))
+#   translations = []
+#   with codecs.getreader("utf-8")(tf.gfile.GFile(trans_file, "rb")) as fh:
+#     for line in fh:
+#       line = _clean(line, subword_option=None)
+#       translations.append(line.split(" "))
 
   # bleu_score, precisions, bp, ratio, translation_length, reference_length
+  per_segment_references = [ref_file]
+  translations = [trans_file]
   bleu_score, _, _, _, _, _ = bleu.compute_bleu(
       per_segment_references, translations, max_order, smooth)
   return 100 * bleu_score
@@ -99,19 +101,23 @@ def _bleu(ref_file, trans_file, subword_option=None):
 def _rouge(ref_file, summarization_file, subword_option=None):
   """Compute ROUGE scores and handling BPE."""
 
-  references = []
-  with codecs.getreader("utf-8")(tf.gfile.GFile(ref_file, "rb")) as fh:
-    for line in fh:
-      references.append(_clean(line, subword_option))
+#   references = []
+#   with codecs.getreader("utf-8")(tf.gfile.GFile(ref_file, "rb")) as fh:
+#     for line in fh:
+#       references.append(_clean(line, subword_option))
 
-  hypotheses = []
-  with codecs.getreader("utf-8")(
-      tf.gfile.GFile(summarization_file, "rb")) as fh:
-    for line in fh:
-      hypotheses.append(_clean(line, subword_option=None))
+#   hypotheses = []
+#   with codecs.getreader("utf-8")(
+#       tf.gfile.GFile(summarization_file, "rb")) as fh:
+#     for line in fh:
+#       hypotheses.append(_clean(line, subword_option=None))
+  
+  references = [ref_file]
+  hypotheses = [summarization_file]
 
   rouge_score_map = rouge.rouge(hypotheses, references)
-  return 100 * rouge_score_map["rouge_l/f_score"]
+#   return 100 * rouge_score_map["rouge_l/f_score"]
+  return rouge_score_map
 
 
 def _accuracy(label_file, pred_file):
