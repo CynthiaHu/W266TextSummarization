@@ -10,3 +10,4 @@ This is the final project for DATASCI W266: Natural Language Processing with Dee
 - [Report](report/) ([Original Google Doc](https://docs.google.com/document/d/1PXQmNlIy0Ls6ETZT9XihUOoPa15PRsvQNivMAL24pTw/edit?usp=sharing), [Presentation](https://docs.google.com/presentation/d/1ysPwWTTqPKdk_l2EAkv6S0Fy0HSiowCfwct3wHcob2o/edit#slide=id.g4a3f447029_0_13))
 - [Other Supporting Files](supporting_files)
 
+What about trying BERT2 or GPT3?
